@@ -4,40 +4,40 @@ import datetime as dt
 import networkx as nx
 import matplotlib.pyplot as plt
 import os
-import multiprocessing # Library untuk menjalankan proses terpisah
-import queue # Untuk mengambil hasil dari proses
-from mba_utils import calculate_mba_process # Import fungsi dari file sebelah
+import multiprocessing 
+import queue 
+from mba_utils import calculate_mba_process 
 
-# --- 1. KONFIGURASI HALAMAN ---
+# --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="Retail Strategy Tool", layout="wide")
 
-st.title("💎 Customer Segmentation & Market Basket Analysis")
+st.title("Customer Segmentation & Market Basket Analysis")
 st.markdown("""
-**Workflow Linear:** Pilih Data -> Cleaning -> Segmentasi (RFM) -> Analisis Pola Belanja (MBA).
+**Workflow Linear:** Choose Data -> Cleaning -> Segmentation (RFM) -> Market Basket Analysis (MBA).
 """)
 
-# --- 2. PENGATURAN PARAMETER ---
-with st.expander("⚙️ Konfigurasi Parameter Analisis (Klik untuk Buka)", expanded=False):
-    st.info("Atur parameter ini untuk mengontrol sensitivitas analisis.")
+# --- 2. PARAMETER SETTING ---
+with st.expander("⚙️ Parameter configuration for MBA analysis.", expanded=False):
+    st.info("Adjust these parameters to control the analysis sensitivity.")
     p1, p2, p3 = st.columns(3)
     
     with p1:
-        st.markdown("**1. Optimasi Memori**")
-        max_products = st.slider("Batasi Produk (Top N)", 100, 2000, 500, 50)
+        st.markdown("**1. Memory Optimization**")
+        max_products = st.slider("Limit Products (Top N)", 100, 2000, 500, 50)
         # Timeout slider
-        timeout_limit = st.number_input("Batas Waktu (Detik)", value=30, min_value=5, max_value=300)
-        algo_choice = st.selectbox("Algoritma", ["fpgrowth (Cepat)", "apriori (Klasik)"])
+        timeout_limit = st.number_input("Timeout (Seconds)", value=30, min_value=5, max_value=300)
+        algo_choice = st.selectbox("Algorithm", ["fpgrowth (Fast)", "apriori (Classic)"])
     
     with p2:
-        st.markdown("**2. Filter Populer**")
+        st.markdown("**2. Filter Popular**")
         min_support = st.slider("Min Support", 0.001, 0.2, 0.02, 0.001)
     
     with p3:
-        st.markdown("**3. Filter Asosiasi**")
+        st.markdown("**3. Association Rules Filter**")
         min_metric = st.selectbox("Metric", ["lift", "confidence"])
         min_threshold = st.slider("Threshold", 0.1, 10.0, 1.0, 0.1)
 
-# --- 3. FUNGSI UTAMA ---
+# --- 3. UTILITY FUNCTIONS ---
 @st.cache_data
 def load_data(file_path):
     try:
@@ -67,41 +67,41 @@ def plot_network_graph(rules, n_rules=20):
     ax.axis('off')
     return fig
 
-# Wrapper agar multiprocessing bisa kirim hasil lewat Queue
+# --- Multiprocessing Wrapper ---
 def process_wrapper(q, basket, min_sup, metric, thresh, algo):
     res, msg = calculate_mba_process(basket, min_sup, metric, thresh, algo)
     q.put((res, msg))
 
-# --- 4. PEMILIHAN DATA ---
+# --- 4. DATA SELECTION ---
 st.divider()
-st.header("📂 1. Pilih Sumber Data")
+st.header("📂 1. Choose Data Source")
 
-data_source = st.radio("Sumber Data:", ["Upload File CSV Sendiri", "Pakai Dataset Default (Online Retail II)"])
+data_source = st.radio("Data Source:", ["Upload File CSV", "Dataset Default (Online Retail II)"])
 df = None
 default_cols = {} 
 
-if data_source == "Upload File CSV Sendiri":
-    uploaded_file = st.file_uploader("Upload File Transaksi (Format CSV)", type=['csv'])
+if data_source == "Upload File CSV":
+    uploaded_file = st.file_uploader("Upload File (Format CSV)", type=['csv'])
     if uploaded_file is not None:
         try:
             df = load_data(uploaded_file)
-            st.success("✅ File Terupload dan Terload!")
-            with st.expander("Lihat Sampel Data"):
+            st.success("✅ Data loaded from uploaded file.")
+            with st.expander("Show Sample Data"):
                 st.dataframe(df.head())
-        except Exception as e: st.error(f"Gagal: {e}")
+        except Exception as e: st.error(f"Error: {e}")
 else: 
     LOCAL_PATH = "dataset/online_retail_II.csv"
     if os.path.exists(LOCAL_PATH):
         try:
             df = load_data(LOCAL_PATH)
             default_cols = {'tx': 'Invoice', 'item': 'Description', 'cust': 'Customer ID', 'qty': 'Quantity', 'price': 'Price', 'date': 'InvoiceDate'}
-            st.success(f"✅ Data Lokal Terload: {LOCAL_PATH}")
-            with st.expander("Lihat Sampel Data"):
+            st.success(f"✅ Data Default Loaded from: {LOCAL_PATH}")
+            with st.expander("Show Sample Data"):
                 st.dataframe(df.head())
-        except Exception as e: st.error(f"Gagal: {e}")
-    else: st.warning(f"File tidak ada di: {LOCAL_PATH}")
+        except Exception as e: st.error(f"Error: {e}")
+    else: st.warning(f"File not found in: {LOCAL_PATH}")
 
-# --- 5. LOGIKA APLIKASI ---
+# --- 5. DATA PREPARATION ---
 if df is not None:
     st.divider()
     st.header("🧹 2. Data Preparation")
@@ -112,17 +112,19 @@ if df is not None:
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        tx_col = st.selectbox("Kolom Invoice", df.columns, index=get_index(df.columns, default_cols.get('tx', '')))
+        tx_col = st.selectbox("Transaction ID Column", df.columns, index=get_index(df.columns, default_cols.get('tx', '')))
     with c2:
-        item_col = st.selectbox("Kolom Produk", df.columns, index=get_index(df.columns, default_cols.get('item', '')))
+        item_col = st.selectbox("Item Column", df.columns, index=get_index(df.columns, default_cols.get('item', '')))
     with c3:
-        cust_col = st.selectbox("Kolom Customer ID", df.columns, index=get_index(df.columns, default_cols.get('cust', '')))
+        cust_col = st.selectbox("Customer ID Column", df.columns, index=get_index(df.columns, default_cols.get('cust', '')))
         
-    with st.expander("Opsi Cleaning"):
-        rm_cancel = st.checkbox("Hapus Cancel ('C')", value=True)
-        rm_null = st.checkbox("Hapus Null Customer", value=True)
-
-    if st.button("Proses Data ⬇️"):
+    with st.expander("Cleaning Options", expanded=True):
+        rm_cancel = st.checkbox("Delete Cancelled ('C') Transaction", value=True)
+        rm_null = st.checkbox("Delete Null Customer", value=True)
+        rm_duplicates = st.checkbox("Delete Duplicate Rows", value=True)
+        rm_items = st.checkbox("Delete Null Items", value=True)
+        
+    if st.button("Data Processing ⬇️"):
         df_clean = df.copy()
         if rm_null:
             df_clean = df_clean.dropna(subset=[cust_col])
@@ -130,6 +132,12 @@ if df is not None:
         if rm_cancel:
             df_clean[tx_col] = df_clean[tx_col].astype(str)
             df_clean = df_clean[~df_clean[tx_col].str.contains("C", na=False)]
+        if rm_duplicates:
+            before_rows = df.shape[0]
+            df = df.drop_duplicates()
+            after_rows = df.shape[0]
+        if rm_items:
+            df_clean = df_clean.dropna(subset=[item_col])
         
         # Fallback Cols
         if not default_cols:
@@ -148,17 +156,17 @@ if df is not None:
             
             st.session_state['df_clean'] = df_clean
             st.session_state['cols'] = {'tx': tx_col, 'item': item_col, 'cust': cust_col, 'date': date_col}
-            st.success(f"Siap! {df_clean.shape[0]} Baris.")
-        except Exception as e: st.error(f"Error Konversi: {e}")
+            st.success(f"Data Ready! {df_clean.shape[0]} Rows.")
+        except Exception as e: st.error(f"Convertion Error: {e}")
 
     # --- 6. RFM ---
     if 'df_clean' in st.session_state:
         st.divider()
-        st.header("👥 3. Segmentasi (RFM)")
+        st.header("👥 3. Segmentation (RFM)")
         df_proc = st.session_state['df_clean']; cols = st.session_state['cols']
         
-        if st.button("Jalankan RFM ⬇️"):
-            with st.spinner("Menghitung RFM..."):
+        if st.button("Run RFM ⬇️"):
+            with st.spinner("Calculating RFM..."):
                 analysis_date = df_proc[cols['date']].max() + dt.timedelta(days=1)
                 rfm = df_proc.groupby(cols['cust']).agg({
                     cols['date']: lambda x: (analysis_date - x.max()).days,
@@ -185,21 +193,21 @@ if df is not None:
 
             # --- 7. MBA (MULTIPROCESSING) ---
             st.divider()
-            st.header("🛒 4. Analisis MBA (Safe Mode)")
+            st.header("🛒 4. MBA Analysis (Safe Mode)")
             f1, f2 = st.columns(2)
             country_col = next((c for c in df_proc.columns if 'country' in c.lower()), None)
             if country_col:
-                with f1: sel_country = st.selectbox("Negara", sorted(df_proc[country_col].astype(str).unique()))
-            with f2: sel_seg = st.selectbox("Segmen", rfm['Segment'].unique())
+                with f1: sel_country = st.selectbox("Country", sorted(df_proc[country_col].astype(str).unique()))
+            with f2: sel_seg = st.selectbox("Segment", rfm['Segment'].unique())
             
-            if st.button("Mulai Analisis (Dengan Timeout) 🚀"):
+            if st.button("Start Analysis (With Timeout) 🚀"):
                 target_cust = rfm[rfm['Segment'] == sel_seg].index
                 df_target = df_proc[(df_proc[cols['cust']].isin(target_cust)) & (df_proc[country_col] == sel_country)]
                 
                 if df_target.empty:
-                    st.warning("Data Kosong.")
+                    st.warning("Data Empty.")
                 else:
-                    st.write(f"Menganalisis **{df_target.shape[0]}** baris...")
+                    st.write(f"Analyzing **{df_target.shape[0]}** rows...")
                     
                     # 1. Optimasi Basket
                     top = df_target[cols['item']].value_counts().head(max_products).index
@@ -217,27 +225,28 @@ if df is not None:
                     
                     p.start()
                     
-                    with st.spinner(f"Sedang menghitung... (Max {timeout_limit} detik)"):
+                    with st.spinner(f"Calculating... (Max {timeout_limit} seconds)"):
                         p.join(timeout=timeout_limit)
                     
                     if p.is_alive():
                         p.terminate() # KILL PROCESS SEKARANG!
                         p.join()
-                        st.error(f"⛔ **TIMEOUT!** Proses dimatikan paksa karena > {timeout_limit} detik.")
-                        st.info("Tips: Kurangi 'Batasi Produk' atau naikkan 'Min Support'.")
+                        st.error(f"⛔ **TIMEOUT!** Process killed due to > {timeout_limit} seconds.")
+                        st.info("Tips: Reduce 'Limit Products' or increase 'Min Support'.")
+                        st.info("or try running on a local computer with higher specifications.")
                     else:
                         if not result_queue.empty():
                             rules_res, msg = result_queue.get()
                             if rules_res is None:
-                                st.warning(f"Gagal: {msg}")
+                                st.warning(f"Error: {msg}")
                             else:
-                                st.success(f"✅ Selesai! {len(rules_res)} Rules.")
+                                st.success(f"✅ Done! {len(rules_res)} Rules.")
                                 # Fix PyArrow
                                 rules_res['antecedents'] = rules_res['antecedents'].apply(lambda x: ', '.join(list(x)))
                                 rules_res['consequents'] = rules_res['consequents'].apply(lambda x: ', '.join(list(x)))
-                                
-                                t1, t2 = st.tabs(["Tabel", "Grafik"])
+
+                                t1, t2 = st.tabs(["Table", "Graph"])
                                 with t1: st.dataframe(rules_res.sort_values('lift', ascending=False).head(10))
                                 with t2: st.pyplot(plot_network_graph(rules_res))
                         else:
-                            st.error("Proses mati tanpa hasil (Out of Memory?).")
+                            st.error("Process died without result (Out of Memory?).")
